@@ -1,0 +1,21 @@
+[package]
+name = "letmego-core"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Use versions from the Root Workspace
+ed25519-dalek = { workspace = true }
+rand = { workspace = true }
+base64ct = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+toml = { workspace = true }
+directories = { workspace = true }
+tokio = { workspace = true }
+
+[lib]
+name = "letmego_core"
+path = "src/lib.rs"

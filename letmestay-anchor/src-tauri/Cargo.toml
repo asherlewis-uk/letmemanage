@@ -1,0 +1,21 @@
+[package]
+name = "letmestay"
+version = "0.1.0"
+description = "LetMeStay - The Anchor Host Service"
+authors = ["you"]
+edition = "2021"
+
+# This is the part I missed. It tells Rust exactly what to name the library.
+[lib]
+name = "letmestay_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { workspace = true }
+
+[dependencies]
+tauri = { workspace = true }
+tauri-plugin-opener = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+letmego-core = { path = "../../letmego-core" }

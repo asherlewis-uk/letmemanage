@@ -1,0 +1,307 @@
+ 
+________________________________________
+1. Executive Summary
+LetMeGo is a distributed computing framework designed to decouple the user's digital environment from physical hardware constraints. By establishing a high-performance, role-based "Tether" between devices, LetMeGo enables a low-power client (The Satellite - LetMeGo-satellite) to seamlessly utilize the storage, processing, and graphical power of a high-performance host (The Host - LetMeStay).
+Unlike traditional remote desktop solutions, LetMeGo focuses on application-level virtualization and filesystem unification, creating a user experience where the remote machine feels like a native extension of the local hardware.
+
+Architecture Status (February 2026):
+• Core tether architecture: ✓ Implemented
+• System tray integration: ✓ Complete (both applications run silently in background)
+• Smart visibility logic: ✓ Operational (UI shows only when check_connection_status() returns false)
+• Workspace structure: ✓ Verified (letmego-core, letmestay-anchor, letmego-satellite)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+________________________________________
+2. System Architecture
+The architecture is defined by two distinct roles. A device must be assigned one of these roles during the initialization phase.
+Feature	LetMeStay (Host)	LetMeGo-satellite (Client)
+Folder Name	letmestay-anchor	letmego-satellite
+Primary Role	Compute, Render, Store	Display, Input, Request
+Power Profile	High TDP / AC Power	Low TDP / Battery Optimized
+Hardware	GPU-enabled, High RAM	SoC (ARM/x86), High-Res Screen
+State	Persistent	Ephemeral / Stateless
+UI Behavior	Silent start (hidden unless not connected)	Silent start (hidden unless not connected)
+System Tray	"LetMeStay - Host"	"LetMeGo - Remote Client"
+2.1 LetMeStay (Host) Responsibilities
+•	System Tray Controller: Runs as a background service with tray icon ("LetMeStay - Host"). Starts with visible: false in tauri.conf.json.
+•	Smart Window Manager: Automatically shows UI on startup only if check_connection_status() returns false (not connected). Otherwise remains hidden.
+•	Virtual Display Driver: Creates headless monitor instances to stream content without physically waking the host screen.
+•	Video Encoder: Captures framebuffers and encodes to H.264/HEVC/AV1.
+•	Input Injection: Receives remote HID (Human Interface Device) commands and injects them into the OS kernel.
+•	Secure Listener: Background service listening for Wake-on-LAN (WoL) "heartbeats" and connection handshakes.
+•	Tether Key Generator: Generates Ed25519 keypairs and 6-digit pairing codes for satellite devices.
+2.2 LetMeGo-satellite (Client) Responsibilities
+•	System Tray Controller: Runs as a background service with tray icon ("LetMeGo - Remote Client"). Starts with visible: false in tauri.conf.json.
+•	Smart Window Manager: Automatically shows UI on startup only if check_connection_status() returns false (not tethered). Otherwise remains hidden.
+•	Stream Decoder: Hardware-accelerated video decoding.
+•	Input Hook: Intercepts local keyboard/mouse events and transmits them over the tunnel.
+•	Virtual Filesystem: Mounts the LetMeStay host's storage directories as local network drives.
+•	State Manager: Monitors lid position and network availability to manage the connection state.
+•	Tether Key Input: Accepts 6-digit pairing codes to establish connection with LetMeStay hosts.
+
+2.3 LetMeGo-core (Shared Library)
+•	Folder: letmego-core
+•	Cryptographic Primitives: Ed25519 keypair generation and TetherKey management (base64 encoding/decoding).
+•	Network Protocol Wrappers: WireGuard tunnel configuration and management.
+•	Configuration Manager: Reading/writing local JSON/TOML config files to ~/.LetMeGo/config.
+•	Shared between both LetMeStay and LetMeGo-satellite applications.
+
+2.4 LetMeManage (Optional Household Dashboard)
+•	Type: Web-based management interface
+•	Purpose: Centralized monitoring and configuration for multiple LetMeStay/LetMeGo-satellite pairs across a household network.
+•	Components:
+	○	Device Registry: View and manage all registered host and client devices.
+	○	Connection Monitor: Real-time status of active tunnels and connection health.
+	○	Configuration Sync: Centralized settings management across all devices.
+	○	Analytics Dashboard: Usage statistics, bandwidth monitoring, and performance metrics.
+
+
+
+
+
+
+
+
+
+
+
+
+
+________________________________________
+3. User Experience (UX) Flow
+Phase 1: Setting Up LetMeStay (Host Setup) — ✓ ARCHITECTURE COMPLETE
+1.	Installation: The user installs the LetMeStay application (letmestay-anchor).
+2.	Silent Start: Application launches in background with system tray icon ("LetMeStay - Host"). UI only appears if not connected.
+3.	Auto-Configuration:
+	○	Silent verification of Wake-on-LAN capabilities in BIOS/Network card.
+	○	Installation of the Virtual Display Driver (planned).
+4.	Tether Key Generation: The system generates a unique Ed25519 cryptographic pairing key (displayed as a 6-digit code or QR).
+Phase 2: Launching LetMeGo-satellite (Client Setup) — ✓ ARCHITECTURE COMPLETE
+1.	Installation: The user installs the LetMeGo-satellite application (letmego-satellite).
+2.	Silent Start: Application launches in background with system tray icon ("LetMeGo - Remote Client"). UI only appears if not tethered.
+3.	Connection: User opens UI (via tray or auto-shown), inputs the 6-digit Tether Key from LetMeStay host.
+4.	Handshake: The Satellite verifies the LetMeStay host's identity via a secure coordination server (planned).
+5.	Assimilation (planned):
+	○	The "LetMeStay Apps" category appears in the local Start Menu/Dock.
+	○	The LetMeStay host's file system mounts as a local drive.
+	○	The connection is established; the device is now "Tethered."
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+________________________________________
+4. Core Feature Specifications
+Feature A: "Ghost Apps" (The RAIL Protocol) — PLANNED
+•	Concept: Remote Applications Integrated Locally.
+•	Technical Implementation:
+	○	Window Capture: LetMeStay captures specific application window handles (HWND/WindowID) rather than the entire desktop.
+	○	Alpha Blending: The stream background is rendered transparent.
+	○	Client Decoration: The Satellite renders its native OS window borders around the incoming video stream.
+	○	Result: A Windows-based heavy application appears as a native window on a macOS or Linux laptop, respecting local window management (snapping, minimizing).
+Feature B: "The Infinity Drive" (Virtual Filesystem) — PLANNED
+•	Concept: Zero-space storage expansion.
+•	Technical Implementation:
+	○	Filesystem in Userspace (FUSE/Dokan): Creates a virtual drive on the Satellite.
+	○	Metadata Caching: The Satellite downloads a lightweight index of the LetMeStay host's file structure (directory tree only).
+	○	On-Demand Streaming: Files are only transferred (streamed) when opened. Writes are cached locally and uploaded asynchronously to the LetMeStay host.
+Feature C: "Smart Wake" (The Heartbeat) — PLANNED
+•	Concept: Automated power management.
+•	Technical Implementation:
+	○	Lid State Detection: When the Satellite laptop opens, it broadcasts a UDP "Magic Packet" to the LetMeStay host's specific MAC address.
+	○	Keep-Alive: While the Satellite is active, it sends a low-frequency heartbeat signal.
+	○	Auto-Sleep: If the Satellite disconnects or closes, the LetMeStay host waits for a timeout period and then returns to Sleep/Suspend mode to conserve energy.
+
+Feature D: "Silent Operation" (System Tray Integration) — ✓ IMPLEMENTED
+•	Concept: Background operation with smart UI visibility.
+•	Technical Implementation:
+	○	Both LetMeStay and LetMeGo-satellite start with visible: false in tauri.conf.json.
+	○	System tray icons provide manual access: "LetMeStay - Host" and "LetMeGo - Remote Client".
+	○	Smart Trigger: UI automatically appears only if check_connection_status() returns false.
+	○	Tray Menu: Show window, quit application.
+	○	Result: Zero UI clutter when already connected; automatic setup prompt when configuration needed.
+
+
+
+
+
+________________________________________
+5. Technical Stack Selection
+5.1 Networking (The Tunnel) — PLANNED
+•	Protocol: WireGuard
+•	Justification: Industry standard for high-speed, secure peer-to-peer VPNs.
+•	Traversal: UDP Hole Punching (to bypass firewalls without router configuration).
+5.2 Streaming (The Visuals) — PLANNED
+•	Engine: Fork of Moonlight/Sunshine (based on NVIDIA GameStream) or FreeRDP.
+•	Optimization: Zero-Copy frame passing (GPU VRAM $\rightarrow$ Network Interface) to minimize latency.
+5.3 System Logic (The Brain) — ✓ IMPLEMENTED
+•	Language: Rust
+•	Justification: Provides memory safety (critical for network-facing apps) and C++ level performance with minimal battery drain on the Satellite device.
+•	Implementation:
+	○	letmego-core: Shared library with crypto (Ed25519), network wrappers, and config management.
+	○	letmestay-anchor: Tauri-based host application (Rust backend + React/TypeScript frontend).
+	○	letmego-satellite: Tauri-based client application (Rust backend + React/TypeScript frontend).
+5.4 UI Framework (The Interface) — ✓ IMPLEMENTED
+•	Framework: Tauri 2.0 (Rust + React/TypeScript)
+•	Justification: Native system webview (WebView2/WebKit) results in <10MB installers vs Electron's 100MB+.
+•	Features Used:
+	○	System tray integration with custom menus.
+	○	Window visibility control (visible: false for silent startup).
+	○	Rust command handlers for backend logic (generate_tether_key, check_connection_status).
+5.5 Cryptography (The Security) — ✓ IMPLEMENTED
+•	Algorithm: Ed25519 (via ed25519-dalek crate)
+•	Key Management: TetherKey struct with base64 encoding for human-readable exchange.
+•	Storage: Keys saved to ~/.LetMeGo/config (planned).
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+________________________________________
+6. Business Case & Market Strategy
+6.1 Market Problem
+•	Device Fragmentation: Users own powerful desktops (now served by LetMeStay) but are forced to use inferior laptops when mobile (now served by LetMeGo-satellite).
+•	Sync Fatigue: Managing files across OneDrive, Dropbox, and local drives creates versioning conflicts. The Infinity Drive (planned) solves this with unified filesystem.
+•	Hardware Cost: Users "buy the same computer twice" (a desktop for power, a laptop for travel). LetMeGo eliminates this by making the desktop accessible from any client device.
+•	UI Clutter: Traditional remote desktop tools are always visible. LetMeStay/LetMeGo-satellite run silently in system tray, appearing only when needed.
+6.2 Target Demographics
+•	The "Power Creative": Video editors and 3D artists who need RTX-level power at a coffee shop but only own a MacBook Air.
+•	The Student/Gamer: Users who have a gaming rig in their dorm but take a cheap Chromebook to class.
+•	The Developer: Engineers who need a specific Linux environment compilation host accessible from any terminal.
+6.3 Monetization Model (Freemium SaaS)
+•	Tier 1: LetMeGo/LetMeStay Core (Free)
+	○	Standard Desktop Mirroring (Full Screen).
+	○	Local Network Connections Only (LAN).
+	○	System Tray Integration & Silent Mode.
+	○	Manual Wake/Sleep.
+	○	Single host-client pair.
+•	Tier 2: LetMeGo Pro ($5/month or $50/year)
+	○	"Ghost Apps" (Window streaming).
+	○	"Infinity Drive" (File mounting).
+	○	"Smart Wake" (WAN/Internet Wake-on-LAN).
+	○	Relay Server Access (for strict firewalls where P2P fails).
+	○	Multiple device pairs.
+•	Tier 3: LetMeGo Enterprise ($15/month or $150/year)
+	○	All Pro features.
+	○	LetMeManage dashboard access for household/organization-wide management.
+	○	Centralized configuration and monitoring.
+	○	Priority support and advanced analytics.
+6.4 Competitive Advantage
+•	vs. TeamViewer/AnyDesk: LetMeGo/LetMeStay is consumer-first, significantly cheaper, and optimized for high-framerate/low-latency (60fps+) rather than static IT support.
+•	vs. Parsec: LetMeGo/LetMeStay focuses on productivity integration (files, seamless windows, silent operation) rather than just raw gaming streams.
+•	vs. Cloud PC (Shadow/Windows 365): LetMeGo/LetMeStay utilizes hardware the user already owns, eliminating monthly rental fees for compute power.
+•	Unique Features:
+	○	Silent operation with smart UI triggering (only appears when needed).
+	○	System tray integration for zero desktop clutter.
+	○	Optional LetMeManage dashboard for household-wide device management.
+	○	Role-based architecture: LetMeStay (host) and LetMeGo-satellite (client) clearly differentiated.
+
+
+________________________________________
+7. Implementation Roadmap
+Phase 1: Logic Verification — ✓ ARCHITECTURE COMPLETE
+•	Objective: Validate connection logic and establish application architecture.
+•	Completed Tasks:
+	○	Project rebranding: LetMeGo-anchor → LetMeStay (letmestay-anchor folder) ✓
+	○	System tray integration for both applications ✓
+	○	Silent mode startup (visible: false) ✓
+	○	Smart window management (check_connection_status() logic) ✓
+	○	Ed25519 TetherKey generation in letmego-core ✓
+	○	Workspace integrity verified (cargo check successful) ✓
+•	Next Requirements:
+1.	Pings the LetMeStay host IP.
+2.	If unreachable, broadcasts a Wake-on-LAN packet.
+3.	Once reachable, initiates the WireGuard handshake.
+Phase 2: The Virtual Display — PLANNED
+•	Objective: Stream video without a physical monitor.
+•	Requirement: Implement a driver capable of spoofing an EDID (Extended Display Identification Data) to the GPU, forcing it to render a 1080p/4K desktop signal that can be captured by the streaming engine on LetMeStay host.
+Phase 3: The Overlay — PLANNED
+•	Objective: The "Ghost App" experience.
+•	Requirement: Refine the streaming protocol to support window-level cropping and transparency masking.
+
+________________________________________
+8. Development Environment Requirements
+•	Rust Toolchain: Install rustup (stable channel).
+•	Node.js & npm: Required for Tauri frontend development (React/TypeScript).
+•	Tauri CLI: cargo install tauri-cli.
+•	Platform Build Tools:
+	○	Windows: Visual Studio Build Tools (for C++ compilation)
+	○	Linux/macOS: GCC or Clang
+•	Environment Configuration (Windows):
+	○	In tunneled/remote VS Code sessions, Cargo may not be in PATH.
+	○	Manually add before running cargo commands:
+		$env:Path += ";C:\Users\<username>\.cargo\bin"
+	○	Alternatively, add to PowerShell profile for persistence:
+		Add-Content $PROFILE '$env:Path += ";$env:USERPROFILE\.cargo\bin"'
+•	Workspace Verification:
+	○	After setup, run: cargo check --workspace
+	○	Expected output: "Finished `dev` profile" with no errors
+	○	Verify metadata: cargo metadata --format-version 1 --no-deps
+

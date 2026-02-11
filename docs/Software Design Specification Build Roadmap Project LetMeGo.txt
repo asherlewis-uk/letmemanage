@@ -1,0 +1,193 @@
+ 
+________________________________________
+1. Modular Architecture Overview
+To ensure stability and separation of concerns, the codebase will be divided into three distinct workspaces (crates/packages).
+Module A: LetMeGo-core (Shared Library)
+•	Language: Rust
+•	Purpose: Contains the shared logic used by both Anchor and Satellite.
+•	Components:
+o	Cryptographic Primitive: Handling Key generation (Ed25519) and Tether Key verification.
+o	Network Protocol: Wrapper around the WireGuard API for tunnel configuration.
+o	Configuration Manager: Reading/writing local JSON/TOML config files.
+Module B: LetMeStay (Host Service)
+•	Folder: letmestay-anchor
+•	Language: Rust (Systems Logic) & C++ (Driver Interaction)
+•	Purpose: Runs silently on the high-power machine. Starts in hidden mode and only shows UI if not connected.
+•	Components:
+o	Signaling Daemon: Listens for incoming handshake requests.
+o	Power State Controller: Manages ACPI states (Sleep/Wake) and Magic Packet listening.
+o	Virtual Display Manager: Interfaces with OS display drivers (IddSampleDriver on Windows / DummyDisplay on Linux).
+o	Stream Server: Integrated instance of the Sunshine (GameStream) server protocol.
+o	System Tray Controller: Background tray icon ("LetMeStay - Host") with menu for showing UI and quitting.
+o	Smart Window Manager: Automatically shows UI on startup if check_connection_status() returns false, otherwise remains hidden.
+Module C: LetMeGo-satellite (Client Application)
+•	Folder: letmego-satellite
+•	Language: Rust (Backend) & TypeScript/React (Frontend via Tauri)
+•	Purpose: The user-facing application on the laptop/tablet. Starts in hidden mode and only shows UI if not connected.
+•	Components:
+o	Frontend UI: Dashboard for "Tethering," Settings, and App Library.
+o	Stream Client: Integrated instance of the Moonlight client protocol (modified for windowed mode).
+o	Virtual Drive Mounter: FUSE implementation to map the remote file system.
+o	System Tray Controller: Background tray icon ("LetMeGo - Remote Client") with menu for showing UI and quitting.
+o	Smart Window Manager: Automatically shows UI on startup if check_connection_status() returns false, otherwise remains hidden.
+Module D: LetMeManage (Household Management Dashboard)
+•	Language: TypeScript/React (Web Application)
+•	Purpose: Optional web-based dashboard for managing multiple LetMeStay/LetMeGo pairs across a household network.
+•	Components:
+o	Device Registry: View and manage all registered Anchor and Satellite devices.
+o	Connection Monitor: Real-time status of active tunnels and connection health.
+o	Configuration Sync: Centralized settings management across all devices.
+o	Analytics Dashboard: Usage statistics, bandwidth monitoring, and performance metrics.
+
+
+
+
+________________________________________
+2. Build Roadmap & Sprint Backlog
+The project is divided into four sequential phases. Each phase functions as a sprint focusing on a "Critical Path" deliverable.
+Phase 1: The Tether (Connectivity Layer) — ✓ ARCHITECTURE COMPLETE
+Goal: Establish a secure, persistent WireGuard tunnel between two devices over the internet without manual port forwarding.
+
+Completed Tasks:
+•	T-000 (System): Project Rebranding & Architecture Setup — ✓ COMPLETE
+o	Renamed anchor application to "LetMeStay" (folder: letmestay-anchor)
+o	Implemented system tray controllers for both applications
+o	Added smart window management with connectivity-based visibility
+o	Configured silent mode startup (visible: false in tauri.conf.json)
+o	Updated all workspace members and dependency paths
+o	Verified successful cargo build
+•	T-002 (Core): Keypair Generation Logic — ✓ FOUNDATION COMPLETE
+o	Implemented Ed25519 TetherKey generation in letmego-core
+o	Created base64 encoding/decoding for key exchange
+o	Integrated into both LetMeStay and LetMeGo-satellite
+
+In Progress:
+•	T-001 (Cloud): Deploy Coordination Function
+o	Task: Deploy a stateless function (AWS Lambda/Cloudflare Worker) that accepts a temporary 6-digit key and stores an IP/PublicKey pair for 60 seconds.
+•	T-003 (Anchor): WireGuard Interface Manager
+o	Task: Create a Rust wrapper that can spin up a wg0 interface programmatically on Windows/Linux.
+•	T-004 (Anchor): Tether Key Display
+o	Task: LetMeStay generates a random 6-digit salt, posts its PubKey to the Coordination Server, and polls for a peer.
+•	T-005 (Satellite): Handshake Logic
+o	Task: Satellite takes user input (6-digit key), queries Coordination Server, retrieves Anchor IP, and configures its own WireGuard interface.
+•	T-006 (System): Connectivity Verification
+o	Validation: Satellite can successfully ping the LetMeStay's internal tunnel IP (e.g., 10.10.0.1).
+Phase 2: The Pulse (Power Management)
+Goal: Allow the Satellite to wake the LetMeStay host from sleep remotely.
+•	P-001 (Satellite): Magic Packet Builder
+o	Task: Create a utility to construct a standard Wake-on-LAN (WoL) packet targeting the LetMeStay host's MAC address.
+•	P-002 (Satellite): Lid State Listener
+o	Task: Implement an OS hook (Rust $\rightarrow$ Win32/Cocoa) that detects when the laptop lid is opened or the system wakes from sleep.
+•	P-003 (LetMeStay): Power Config Validator
+o	Task: Create a script that checks if "Wake on Magic Packet" is enabled in the Network Adapter settings (report warning if false).
+•	P-004 (Core): Heartbeat Protocol
+o	Task: Implement a lightweight UDP beacon sent every 30s from Satellite to LetMeStay host to keep the NAT tunnel open.
+Phase 3: The Lens (Visual Streaming)
+Goal: Stream the LetMeStay host's desktop to the Satellite with low latency.
+•	V-001 (LetMeStay): Virtual Display Driver
+o	Task: Integrate an "Indirect Display Driver" (Windows) or Dummy Plug (Linux) to force the GPU to render without a monitor plugged in.
+•	V-002 (LetMeStay): Sunshine Integration
+o	Task: Embed the Sunshine stream server binary. Configure it to bind only to the WireGuard interface IP (Security Hardening).
+•	V-003 (Satellite): Moonlight Client Embed
+o	Task: Embed the Moonlight-core C++ library into the Rust client.
+•	V-004 (Frontend): Video Surface
+o	Task: Create a hardware-accelerated canvas (WebGPU or native surface) in Tauri to render the decoded video stream.
+•	V-005 (System): Input Injection
+o	Task: Map Satellite mouse/keyboard events to the LetMeStay host's virtual HID driver.
+Phase 4: The Illusion (Integration Features)
+Goal: Make the remote stream feel local (Files & Window Management).
+•	I-001 (LetMeStay): File Indexer
+o	Task: Create a service that scans a target directory and generates a lightweight JSON tree structure.
+•	I-002 (Satellite): FUSE/Dokan Mount
+o	Task: Implement a virtual filesystem driver that mounts the JSON tree as a local Drive Letter (Z:).
+•	I-003 (Core): File Streaming Logic
+o	Task: Implement "Read on Demand": When a file is accessed on Z:, request the byte stream from LetMeStay host over the Tunnel.
+•	I-004 (LetMeStay): Window Cropping
+o	Task: Update Stream Server to capture specific Window IDs rather than the full desktop framebuffer (The "Ghost App" foundation).
+•	I-005 (Frontend): App Launcher
+o	Task: Create a "Start Menu" on the Satellite that lists apps installed on the LetMeStay host.
+•	I-006 (LetMeManage): Dashboard Integration
+o	Task: Create REST API endpoints in LetMeStay and LetMeGo-satellite for remote management.
+o	Task: Build web dashboard for monitoring and configuring multiple device pairs.
+
+
+
+
+________________________________________
+3. Technology Stack Breakdown
+Component	Technology Choice	Rationale
+System Language	Rust	Memory safety, zero-cost abstractions, cross-platform.
+GUI Framework	Tauri (Rust + React/TS)	Uses system webview (WebView2/WebKit), resulting in <10MB installers vs Electron's 100MB+.
+Tunnel Protocol	WireGuard	Kernel-level performance, state-of-the-art crypto.
+Video Protocol	RTSP / WebRTC (via Sunshine)	Hardware encoding support (NVENC/AMF/QuickSync).
+Database	SQLite (Local)	Storing configuration, known peers, and key pairs locally.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+________________________________________
+4. Development Environment Setup
+Requirement: You need a development environment capable of compiling system-level code for Windows and POSIX (Linux/macOS).
+1.	Rust Toolchain: Install rustup (stable channel).
+2.	C++ Build Tools: Visual Studio Build Tools (Windows) or GCC/Clang (Linux/macOS) — required for compiling the WireGuard and ffmpeg bindings.
+3.	LLVM: Required for bindgen (generating Rust bindings from C++ libraries).
+4.	Tauri CLI: cargo install tauri-cli.
+5.	Environment Variables (Windows): In tunneled/remote sessions, ensure Cargo is in PATH:
+	$env:Path += ";C:\Users\<username>\.cargo\bin"
+	Alternatively, add this to your PowerShell profile for persistence.
+6.	Node.js & npm: Required for the Tauri frontend (React/TypeScript) development.
+7.	Workspace Verification: After setup, run cargo check --workspace to verify all dependencies resolve correctly.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+________________________________________
+5. Risk Assessment & Mitigation
+•	Risk: NAT Traversal Failure. Some corporate or strict routers block UDP (WireGuard).
+o	Mitigation: Implement a TCP fallback or use a TURN server (relay) for these specific edge cases, though this increases latency.
+•	Risk: Latency Spikes.
+o	Mitigation: Implement "Adaptive Bitrate" in the stream logic. If ping > 50ms, automatically lower the video bitrate and resolution to maintain responsiveness.
+•	Risk: Security/Unwanted Access.
+o	Mitigation: The "Signaling Server" acts ONLY as a broker. It never sees the traffic. The WireGuard tunnel key exchange ensures that only the holder of the private key (the specific Satellite device) can decrypt the LetMeStay host's stream.
+•	Risk: User Confusion (Hidden Applications).
+o	Mitigation: Both applications implement smart visibility logic. If check_connection_status() returns false (not connected), the UI automatically appears. System tray icons provide manual access at all times with clear branding ("LetMeStay - Host" and "LetMeGo - Remote Client").
+•	Risk: Build Failures After Renaming.
+o	Mitigation: Workspace integrity verified via cargo metadata and cargo check. All crate names, library names, and import paths have been audited and corrected.
+
