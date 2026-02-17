@@ -1,7 +1,7 @@
  
 ________________________________________
 1. Executive Summary
-LetMeGo is a distributed computing framework designed to decouple the user's digital environment from physical hardware constraints. By establishing a high-performance, role-based "Tether" between devices, LetMeGo enables a low-power client (The Satellite - LetMeGo-satellite) to seamlessly utilize the storage, processing, and graphical power of a high-performance host (The Host - LetMeStay).
+LetMeManage is a distributed computing framework designed to decouple the user's digital environment from physical hardware constraints. By establishing a high-performance, role-based "Tether" between devices, LetMeGo enables a low-power client (The Satellite - LetMeGo-satellite) to seamlessly utilize the storage, processing, and graphical power of a high-performance host (The Host - LetMeStay).
 Unlike traditional remote desktop solutions, LetMeGo focuses on application-level virtualization and filesystem unification, creating a user experience where the remote machine feels like a native extension of the local hardware.
 
 Architecture Status (February 2026):
